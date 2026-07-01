@@ -131,6 +131,22 @@ make integration-test
 | `DELETE` | `/servers/{id}`       | API Key  | Remove a server                    |
 | `POST`   | `/servers/{id}/check` | No       | Trigger a manual health check      |
 
+## CI/CD Pipeline
+
+The GitHub Actions pipeline runs on every push and PR to `main`:
+
+```
+lint ─┐
+test ─┤── integration-test ── build (main only)
+```
+
+| Job                | Description                                     |
+|--------------------|-------------------------------------------------|
+| `lint`             | flake8 code quality check                       |
+| `test`             | Unit + route tests with coverage >= 75%         |
+| `integration-test` | Starts Docker Compose and runs end-to-end tests |
+| `build`            | Builds API and Dashboard Docker images          |
+
 ## Project Structure
 
 ```

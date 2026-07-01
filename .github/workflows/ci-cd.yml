@@ -2,19 +2,11 @@ name: CI/CD
 
 on:
   push:
-    branches:
-      - "feature/**"
-      - develop
-      - "release/**"
-      - main
-
-permissions:
-  contents: write
-  pull-requests: write
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  # ──────────────── Common stages (all branches) ────────────────
-
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -68,14 +60,9 @@ jobs:
       - name: Run integration tests
         run: make integration-test
 
-  # ──────────────── Build (develop, release/*, main) ────────────────
-
   build:
     needs: [lint, test, integration-test]
-    if: >-
-      github.ref == 'refs/heads/develop'
-      || startsWith(github.ref, 'refs/heads/release/')
-      || github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,96 +72,3 @@ jobs:
 
       - name: Build Dashboard image
         run: docker build -f dashboard/Dockerfile -t devops-monitor-dashboard .
-
-  # ──────────────── feature/* → PR to develop ────────────────
-
-  open-pr-develop:
-    needs: [lint, test, integration-test]
-    if: startsWith(github.ref, 'refs/heads/feature/')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create Pull Request to develop
-        run: |
-          gh pr create \
-            --base develop \
-            --head "${{ github.ref_name }}" \
-            --title "Merge ${{ github.ref_name }} into develop" \
-            --body "Auto-generated PR from feature branch \`${{ github.ref_name }}\`." \
-          || echo "PR already exists"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ──────────────── develop → create release branch ────────────────
-
-  create-release:
-    needs: [build]
-    if: github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Create release branch
-        run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$LATEST_TAG" ]; then
-            NEW_VERSION="v1.0.0"
-          else
-            VERSION=${LATEST_TAG#v}
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-            PATCH=$((PATCH + 1))
-            NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-          fi
-          BRANCH="release/${NEW_VERSION}"
-
-          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null 2>&1; then
-            echo "Branch $BRANCH already exists, skipping."
-          else
-            git checkout -b "$BRANCH"
-            git push origin "$BRANCH"
-            echo "Created branch $BRANCH"
-          fi
-
-  # ──────────────── release/* → tag + PR to main ────────────────
-
-  tag-release:
-    needs: [build]
-    if: startsWith(github.ref, 'refs/heads/release/')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Create tag from branch name
-        run: |
-          TAG="${GITHUB_REF_NAME#release/}"
-          if git rev-parse "$TAG" > /dev/null 2>&1; then
-            echo "Tag $TAG already exists, skipping."
-          else
-            git tag "$TAG"
-            git push origin "$TAG"
-            echo "Created tag $TAG"
-          fi
-
-  pr-to-main:
-    needs: [build]
-    if: startsWith(github.ref, 'refs/heads/release/')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create Pull Request to main
-        run: |
-          VERSION="${GITHUB_REF_NAME#release/}"
-          gh pr create \
-            --base main \
-            --head "${{ github.ref_name }}" \
-            --title "Release ${VERSION}" \
-            --body "Merge release \`${VERSION}\` into main." \
-          || echo "PR already exists"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

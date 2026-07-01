@@ -54,6 +54,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Create .env file
+        run: cp .env.example .env && sed -i 's/^API_KEY=.*/API_KEY=ci-test-key/' .env
+
       - name: Run integration tests
         run: make integration-test
 

@@ -7,6 +7,21 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint
+        run: make lint
+
   test:
     runs-on: ubuntu-latest
     env:
@@ -21,14 +36,29 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Lint
-        run: make lint
-
       - name: Run tests
         run: make test
 
+  integration-test:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    env:
+      API_KEY: ci-test-key
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run integration tests
+        run: make integration-test
+
   build:
-    needs: test
+    needs: [lint, test, integration-test]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
